@@ -1,30 +1,147 @@
 ---
-title: "Practical Machine Learning Course Project"
+title: "Practical Machine Learning Course Project: Weight Lifting Exercise"
 author: "Debasmita Biswal"
 date: '2017-12-01'
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+<style>
+body {
+text-align: justify}
+</style>
+
+## Introduction
+
+Human activity recognition (HAR) is an active field of research in computer vision and machine learning, where the goal is to understand human behaviour from data captured by a variety of approaches such as cameras and wearable sensor devices (Ref:<http://groupware.les.inf.puc-rio.br/work.jsf?p1=10335>). HAR is a powerful tool in medical application arears that help enrich feature set in health studies and enhance personalization and effectiveness of health, wellness and fitness applications (Ref: <https://arxiv.org/pdf/1607.04867.pdf>). Velloso et al.reported a study on qualitative activity recognition, where the aim was to qualitatively assess and provide feedback on weight lifting exercies.   (Ref:<http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf>). In this study data was collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The participants were asked to perform weight lifts correctly and incorrectly in 5 different ways. 
+  
+  The goal of this project is to predict the manner in which the participants performed the exercise (among the 5 different ways), i.e., to predict the quality of the activity performed.
+
+## Data
+
+The training data for this project was obtained from <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv> and the test data was acquired from <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>. 
+
+## Data Analysis
+
+read.csv function was used to load the training and test dataset.
+```{r echo=FALSE}
+training <- read.csv("/Users/debasmitabiswal/Data-science-specialization/Machine learning/Project-assignment/training.csv",header=TRUE, na.strings=c("", "NA"))
+test <- read.csv("/Users/debasmitabiswal/Data-science-specialization/Machine learning/Project-assignment/testing.csv", header=TRUE, na.strings=c("", "NA"))
+```
+A quick dimension check reveals that the data set has `r ncol(training)` columns in total. The `training` data has `r nrow(training)` rows and the `test` data has `r nrow(test)` rows. As a first step in data processing, the internal structure of the `training` data set was investigated: 
+```{r} 
+str(training)
+``` 
+In the data processing stage, it is rather important to find missing data, which can have a big impact on data modeling (later). The `Amelia` package provides useful visualization tool to get a quick summary of missing values in the data set. Here is the code to plot missing data:
+```{r, echo=TRUE}
+# load library Amelia
+library(Amelia)
+# Use missmap function plot missing data
+missmap(training, col=c("orange", "blue"), legend=TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+The missing plot reveals that a greater percentage of data is missing for many variables (orange color represents missing data). The number of missing observations for each of the variables in the `training` data set can also be found by using the code, `sapply(training,function(x) sum(is.na(x)))`. Considering the greater percentage of missing values, data imputation cannot be used for these features. Therefore, those features for which the number of NA's were greater than 19000 were removed by using `select` function from `dplyr` package. Additionally, the first 7 variables in the `training` data set, which include user identity and timestamp information, were also removed before data modeling. Similar data preprocessing was also applied to the `test` set to remove the features with missing values, and this `test` data was hold back to get an objective final evaluation of the best performing model. 
+```{r, echo=TRUE}
+# load library dplyr
+library(dplyr)
+# select variables containing > 19000 NA's.
+var <- colnames(training)[colSums(is.na(training)) > 19000]
+# select a subset of training data
+subdata <- select(training, -(1:7), -one_of(var)) 
+```
+```{r, echo=FALSE}
+var1 <- colnames(test)[colSums(is.na(test)) > 15]
+final_test <- select(test, -(1:7), -one_of(var1))
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+The number of features in the `training` and `test` set were reduced to 53 during this process. The `training` data set was then split to create a train and a validation data set by using the `createDataPartition` function from `caret` package. The `createDataPartition` function conducts data splits within groups of data, which is `classe` variable for the `training` set. During data splitting, 75% of data was used to train the model (`train.new` set) and the remainder 25% of data was used for prediction (`cv`) set. While the data in `train.new` set was used to estimate model parameters, the data in `cv` set was used to get an independent assessment of model efficiency. 
+```{r, echo=TRUE}
+# load library caret
+library(caret)
+# split training data to create a train and validation set
+inTrain <- createDataPartition(y=subdata$classe, p=0.75, list = FALSE)
+train.new <- subdata[inTrain, ]
+cv <- subdata[-inTrain, ]
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Data Modeling and Prediction
+
+Prediction of `classe` variable in this project represents a multi-class classification problem, for which four different models were tested:1. classification and regression tree (CART); 2. Bagging CART model; 3. Stochastic gradient boosting (Generalized boosted modeling); 4. Random forest. 
+In the first step, the default algorithm paramters were used for each of the model, as the `caret` package helps with estimating good defaults via automatic tuning functionality and the `tunelength` argument to the `train` function. To avoid overfitting during training, resampling techniques are typically used. In this project, a 10-fold repeated cross validation with 3 repeats was used to find a robust estimate of accuracy of the models. To have an honest comparison between models, it is important to ensure that each algorithm is evaluated on exactly the same splits of data. Therefore, a random number seed was assigned to a variable (`seed`), which can be used to reset the random number generator prior to training each of the algorithm. 
+The evaluation metric `Accuracy` was used in the `train` function for each model.
+
+
+![](/Users/debasmitabiswal/Desktop/test-models.png)
+
+
+
+The performance of the four models were compared and a quick summary of the results of the algorithms (in sample acuracy) were obtained as a table (`results <- resamples(list(cart=fit.cart, bagging=fit.treebag, gbm=fit.gbm, rf=fit.rf)); summary(results)`).
+
+![ **Results Summary** ](/Users/debasmitabiswal/Desktop/results-table.png)
+
+
+These results can also be visualized by using a box plot.
+
+![ **Comparing models using box plot** ](/Users/debasmitabiswal/Data-science-specialization/Machine learning/Project-assignment/compare-accuracy.png)
+
+
+Comparison of accuracy for the four models reveal that bagging, boosting and random forest algorithms perform better in predicting the outcome. For further investigation, the trained models were used to predict outcome of the cross-validation (`cv`) set. The predicted outcome is then compared to the actual outcome and out-of-sample accuracy were computed for various models. 
+
+
+![](/Users/debasmitabiswal/Desktop/pred-1.png)
+
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/con-mat-dec-tree.png)
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/pred-2.png)
+
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/boosting.png)
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/pred-3.png)
+
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/bagging.png)
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/pred-4.png)
+
+
+
+
+
+![](/Users/debasmitabiswal/Desktop/random-forest.png)
+
+
+
+
+
+The out-of-sample accuracy for the classification tree (CART), gbm, bagging CART, and Random forest models were found to be 48.1%, 96.6%, 98.9%, and 99.5%, respectively. Typically, in-sample accuracy is expected to be greater than the out-of-sample accuracy. While it is observed that the out-of-sample accuracy is more or less similar to the in-sample accuracy, the Random forest is the best model with respect to prediction and can now be used for a final evaluation against the `test` set (which was not used for validation during model training). 
+
+
+![](/Users/debasmitabiswal/Desktop/result-final.png)
+
+![](/Users/debasmitabiswal/Desktop/pred-final.png)
+
+## Conclusion
+
+In this project, four different classification algorithms were tested to predict outcome, which is the quality of execution of weight lifting exercises. The Random forest model was found to be the best model during training and cross-validation step. When this model was used to predict the outcome for the `test` set, 100% accuracy was observed.
