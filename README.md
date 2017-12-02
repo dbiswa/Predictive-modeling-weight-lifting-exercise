@@ -1,2 +1,2 @@
 # Predictive-modeling-weight-lifting-exercise
-Adding some comment
+In this machine learning project, the quality of execution of weight lifting exercises was predicted via multi-class classification algorithm. 
